@@ -1,1 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Garena Pro Max</title>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: #d1d9e6; font-family: -apple-system, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
+        .glass { background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 30px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+        #loginScreen { position: fixed; inset: 0; background: #e0e5ec; z-index: 999; display: flex; align-items: center; justify-content: center; }
+        .container { width: 92%; max-width: 400px; display: none; flex-direction: column; gap: 15px; height: 90vh; }
+        .grid-menu { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+        button { background: #fff; border: none; color: #000; padding: 16px; border-radius: 18px; font-weight: 900; text-transform: uppercase; cursor: pointer; transition: 0.2s; box-shadow: 4px 4px 10px #b8b9be, -4px -4px 10px #ffffff; }
+        button:active { box-shadow: inset 2px 2px 5px #b8b9be, inset -2px -2px 5px #ffffff; }
+        .terminal { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .data-line { color: #000; font-family: monospace; font-size: 14px; font-weight: 900; padding: 15px; background: rgba(255,255,255,0.4); border-radius: 15px; border-left: 6px solid #007aff; }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.2); backdrop-filter: blur(10px); z-index: 100; align-items: center; justify-content: center; }
+        .modal-box { width: 85%; max-width: 340px; padding: 25px; text-align: center; }
+        input { width: 100%; padding: 15px; margin: 8px 0; border-radius: 15px; border: none; font-weight: 800; text-align: center; outline: none; background: #e0e5ec; box-shadow: inset 2px 2px 5px #b8b9be, inset -2px -2px 5px #ffffff; }
+    </style>
+</head>
+<body>
 
+<div id="loginScreen">
+    <div class="glass" style="padding: 40px; text-align: center; width: 85%;">
+        <h2 style="font-weight: 900;">SECURE LOGIN</h2>
+        <input type="password" id="passInput" placeholder="Password">
+        <button onclick="checkPass()" style="width: 100%; margin-top: 15px; background: #000; color: #fff;">ENTER</button>
+    </div>
+</div>
+
+<div class="container" id="mainApp">
+    <div class="grid-menu glass">
+        <button onclick="openPop('add')">Add Recovery Email</button>
+        <button onclick="openPop('check')">Check Bind Status</button>
+        <button onclick="openPop('platforms')">Check Links</button>
+        <button onclick="openPop('cancel')">Cancel Request</button>
+    </div>
+    <div class="terminal glass" id="output"></div>
+</div>
+
+<div class="modal" id="modal">
+    <div class="modal-box glass">
+        <h3 id="popTitle" style="font-weight: 900;">ACTION</h3>
+        <div id="inputGroup"></div>
+        <button onclick="execute()" id="execBtn" style="background: #007aff; color: #fff; width: 100%; margin-top: 15px;">CONFIRM</button>
+        <button onclick="closePop()" style="background:transparent; color:#ff3b30; font-size:12px; margin-top:10px; box-shadow:none;">CLOSE</button>
+    </div>
+</div>
+
+<script>
+    let mode = '';
+    let tempEmail = '';
+    let tempAccess = '';
+
+    function checkPass() {
+        if(document.getElementById('passInput').value === 'mahendra') {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'flex';
+        } else { alert('Wrong!'); }
+    }
+
+    function openPop(m) {
+        mode = m;
+        document.getElementById('popTitle').innerText = m.toUpperCase();
+        const box = document.getElementById('inputGroup');
+        box.innerHTML = m === 'add' ? `<input id="email" placeholder="Email"><input id="access" placeholder="Token">` : `<input id="access" placeholder="Token">`;
+        document.getElementById('modal').style.display = 'flex';
+    }
+
+    function closePop() { document.getElementById('modal').style.display = 'none'; }
+
+    async function execute() {
+        const access = document.getElementById('access')?.value;
+        const email = document.getElementById('email')?.value || '';
+        
+        if (mode === 'add') {
+            tempEmail = email; tempAccess = access;
+            const r = await fetch('/api', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'send_otp', access, email})});
+            const d = await r.json();
+            if(d.error_code === 0 || d.status === "ok" || r.status === 200) {
+                const box = document.getElementById('inputGroup');
+                box.innerHTML = `<p style="font-weight:800">OTP Sent to ${email}</p><input id="otp" placeholder="Enter OTP">`;
+                mode = 'verify';
+            } else { renderClean(d); closePop(); }
+        } 
+        else if (mode === 'verify') {
+            const otp = document.getElementById('otp').value;
+            const r = await fetch('/api', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'verify_otp', access:tempAccess, email:tempEmail, otp})});
+            renderClean(await r.json());
+            closePop();
+        }
+        else {
+            const r = await fetch('/api', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:mode, access})});
+            renderClean(await r.json());
+            closePop();
+        }
+    }
+
+    function renderClean(obj) {
+        const out = document.getElementById('output');
+        out.innerHTML = '';
+        for (const [k, v] of Object.entries(obj)) {
+            const div = document.createElement('div');
+            div.className = 'data-line';
+            div.innerText = `${k.toUpperCase().replace(/_/g, ' ')}: ${JSON.stringify(v)}`;
+            out.appendChild(div);
+        }
+    }
+</script>
+</body>
+</html>
